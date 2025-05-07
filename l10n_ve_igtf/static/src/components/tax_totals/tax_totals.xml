@@ -7,7 +7,10 @@
         t-inherit-mode="extension" 
         owl="1">
         <xpath expr="//t[@t-as='taxGroup']" position="after">
-            <t t-if="totals.igtf.apply_igtf &amp;&amp; !totals.igtf.is_igtf_suggested">
+            <!--<t t-if="totals.igtf && totals.igtf.apply_igtf && !totals.igtf.is_igtf_suggested"> 
+            <t t-if="totals.igtf.apply_igtf &amp;&amp; !totals.igtf.is_igtf_suggested">-->
+            <t t-if="totals.igtf &amp;&amp; totals.igtf.apply_igtf &amp;&amp; !totals.igtf.is_igtf_suggested">
+
                 <tr>
                     <td class="o_td_label">
                         <label class="o_form_label o_tax_total_label">
@@ -35,7 +38,10 @@
         </xpath>
 
         <xpath expr="//tbody" position="inside">
-            <t t-if="totals.igtf.apply_igtf &amp;&amp; !!totals.igtf.is_igtf_suggested">
+            <!--<t t-if="totals.igtf && totals.igtf.apply_igtf && !!totals.igtf.is_igtf_suggested">
+            <t t-if="totals.igtf.apply_igtf &amp;&amp; !!totals.igtf.is_igtf_suggested">-->
+            <t t-if="totals.igtf &amp;&amp; totals.igtf.apply_igtf &amp;&amp; !!totals.igtf.is_igtf_suggested">
+
                 <tr>
                     <td class="o_td_label">
                         <label class="o_form_label o_tax_total_label">
@@ -89,7 +95,9 @@
         t-inherit-mode="extension" 
         owl="1">
         <xpath expr="//t[@t-as='taxGroup']" position="after">
-            <t t-if="totals.igtf.apply_igtf &amp;&amp; !totals.igtf.is_igtf_suggested">
+            <!--<t t-if="totals.igtf && totals.igtf.apply_igtf && !totals.igtf.is_igtf_suggested"> 
+            <t t-if="totals.igtf.apply_igtf &amp;&amp; !totals.igtf.is_igtf_suggested">-->
+            <t t-if="totals.igtf &amp;&amp; totals.igtf.apply_igtf &amp;&amp; !totals.igtf.is_igtf_suggested">
                 <tr>
                     <td class="o_td_label">
                         <label class="o_form_label o_tax_total_label">BI IGTF</label>
@@ -116,7 +124,9 @@
         </xpath>
 
         <xpath expr="//tbody" position="inside">
-            <t t-if="totals.igtf.apply_igtf &amp;&amp; !!totals.igtf.is_igtf_suggested">
+            <!--<t t-if="totals.igtf && totals.igtf.apply_igtf && !!totals.igtf.is_igtf_suggested"> 
+            <t t-if="totals.igtf.apply_igtf &amp;&amp; !!totals.igtf.is_igtf_suggested">-->
+            <t t-if="totals.igtf &amp;&amp; totals.igtf.apply_igtf &amp;&amp; !!totals.igtf.is_igtf_suggested">
                 <tr>
                     <td class="o_td_label">
                         <label class="o_form_label o_tax_total_label">
