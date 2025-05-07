@@ -269,9 +269,10 @@
 
                     <td class="text-end">
                         <span
-                            t-att-class="oe_subtotal_footer_separator"
-                            t-esc="subtotal['formatted_amount']"
+                            t-att-class="oe_subtotal_footer_separator" t-esc="subtotal.get('formatted_amount', '0.00')"
                         />
+                            <!-- t-esc="subtotal['formatted_amount']" -->
+                        
                     </td>
                 </tr>
 
