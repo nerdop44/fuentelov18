@@ -10,8 +10,9 @@ _logger = logging.getLogger(__name__)
 
 
 class AccountMove(models.Model):
-    _name = "account.move"
-    _inherit = ["account.move"]
+   # _name = "account.move"
+    #_inherit = ["account.move"]
+    _inherit = "account.move"
 
     correlative = fields.Char("Control Number", copy=False, help="Sequence control number")
     invoice_reception_date = fields.Date(
@@ -25,6 +26,42 @@ class AccountMove(models.Model):
 
     next_installment_date = fields.Date(compute="_compute_next_installment_date")
 
+#    # INICIO DE LAS MODIFICACIONES SUGERIDAS PARA RELACIONAR CON account.retention.line
+#    retention_iva_line_ids = fields.One2many(
+#        'account.retention.line',
+#        'move_id',
+#        string='Retenciones de IVA',
+#        domain=[('type_retention', '=', 'iva')],
+#        readonly=True,
+#        copy=False,
+#        # Este campo One2many crea la relación inversa para las líneas de retención de IVA.
+#        # 'account.retention.line' es el modelo relacionado.
+#        # 'move_id' es el campo Many2one en 'account.retention.line' que conecta con este #modelo.
+#    )
+#    retention_islr_line_ids = fields.One2many(
+#        'account.retention.line',
+#        'move_id',
+#        string='Retenciones de ISLR',
+#        domain=[('type_retention', '=', 'islr')],
+#        readonly=True,
+#        copy=False,
+#        # Este campo One2many crea la relación inversa para las líneas de retención de ISLR.
+#        # 'account.retention.line' es el modelo relacionado.
+#        # 'move_id' es el campo Many2one en 'account.retention.line' que conecta con este #modelo.
+#    )
+#    retention_municipal_line_ids = fields.One2many(
+#        'account.retention.line',
+#        'move_id',
+#        string='Retenciones Municipales',
+#        domain=[('type_retention', '=', 'municipal')],
+#        readonly=True,
+#        copy=False,
+#        # Este campo One2many crea la relación inversa para las líneas de retención #municipales.
+#        # 'account.retention.line' es el modelo relacionado.
+#        # 'move_id' es el campo Many2one en 'account.retention.line' que conecta con este #modelo.
+#    )
+#    # FIN DE LAS MODIFICACIONES SUGERIDAS
+   
     @api.constrains("correlative", "journal_id.is_contingency")
     def _check_correlative(self):
         AccountMove = self.env["account.move"]
@@ -196,3 +233,35 @@ class AccountMove(models.Model):
                 }
             )
         return correlative.next_by_id(correlative.id)
+
+    @api.model
+    def _get_tax_totals(self):
+        # Llama al método original para obtener los totales de impuestos
+        base_lines = self.invoice_line_ids.mapped(lambda line: {
+           'price_subtotal': line.price_subtotal,
+           'discount': line.discount,
+           'taxes': line.tax_ids,
+           'record': line
+        })
+            
+        # Llama al método de impuestos para calcular los totales
+        tax_totals = self.env['account.tax']._prepare_tax_totals(base_lines, self.currency_id)
+    
+        # Asegúrate de que cada subtotal tenga 'formatted_amount'
+        for subtotal in tax_totals.get('subtotals',[]):
+            if 'formatted_amount' not in subtotal:
+                subtotal['formatted_amount'] = self.env['account.move'].format_monetary(subtotal['amount'], self.currency_id)
+        
+        # Asegúrate de que 'foreign_subtotals' esté presente y tenga 'formatted_amount'
+        if 'foreign_subtotals' in tax_totals:
+            foreign_currency = self.secondary_currency_id if hasattr(self, 'secondary_currency_id') and self.secondary_currency_id else self.currency_id # Usa la moneda alternativa si está disponible, sino la moneda principal
+            for subtotal in tax_totals['foreign_subtotals']:
+                if 'formatted_amount' not in subtotal:
+                    subtotal['formatted_amount'] = self.env['account.move'].format_monetary(subtotal['amount'], foreign_currency)
+
+        return tax_totals
+                ### Verifica que 'foreign_subtotals' esté presente
+        ##if 'foreign_subtotals' not in tax_totals:
+        ##    tax_totals['foreign_subtotals'] = []  # O inicializa como desees
+
+        ##return tax_totals
