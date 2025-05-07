@@ -114,7 +114,7 @@
 		<record id="view_retention_municipal_tree_binaural_payment_extension" model="ir.ui.view">
 			<field name="name">Retention Municipal client list</field>
 			<field name="model">account.retention</field>
-			<field name="type">tree</field>
+			<field name="type">list</field>
 			<field name="arch" type="xml">
 				<list string="Retention">
 					<field name="number"/>
