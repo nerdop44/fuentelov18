@@ -34,10 +34,19 @@ class AccountMove(models.Model):
         """
         Compute the amount to pay of the IGTF
         """
+        
+
         for move in self:
             move.amount_to_pay_igtf = 0
-            if move.invoice_line_ids and move.is_invoice(include_receipts=True) and move.tax_totals:
-                move.amount_to_pay_igtf = move.tax_totals["igtf"]["igtf_amount"] - move.amount_paid
+            if move.invoice_line_ids and move.is_invoice(include_receipts=True):
+                _logger.debug("Tax totals for move ID %s: %s", move.id, move.tax_totals)
+                if move.tax_totals:  # Verifica que tax_totals no esté vacío
+                    if "igtf" in move.tax_totals and "igtf_amount" in move.tax_totals["igtf"]:
+                        move.amount_to_pay_igtf = move.tax_totals["igtf"]["igtf_amount"] - move.amount_paid
+                    else:
+                        _logger.warning("Key 'igtf' or 'igtf_amount' not found in tax_totals for move ID: %s", move.id)
+                else:
+                    _logger.warning("tax_totals is empty for move ID: %s", move.id)
 
     @api.depends(
         "amount_total", "amount_residual", "amount_residual_igtf", "amount_to_pay_igtf", "bi_igtf"
