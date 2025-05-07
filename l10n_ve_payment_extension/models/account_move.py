@@ -102,6 +102,10 @@ class AccountMoveRetention(models.Model):
         retention to be created.
         """
         self.ensure_one()
+##########
+        if not self.env.context.get('force_single', False):
+            raise UserError(_("This method should be called in a single record context."))
+######
         if not self.env.company.islr_supplier_retention_journal_id:
             raise UserError(_("The company must have a journal for ISLR supplier retention."))
         islr_retention = self.retention_islr_line_ids
@@ -123,6 +127,11 @@ class AccountMoveRetention(models.Model):
         at least one tax, in order for the IVA retention to be created.
         """
         self.ensure_one()
+##########
+        if not self.env.context.get('force_single', False):
+            raise UserError(_("This method should be called in a single record context."))
+############
+
         if not self.env.company.iva_supplier_retention_journal_id:
             raise UserError(_("The company must have a journal for IVA supplier retention."))
         if not any(self.invoice_line_ids.mapped("tax_ids").filtered(lambda x: x.amount > 0)):
@@ -134,6 +143,10 @@ class AccountMoveRetention(models.Model):
         municipal retention to be created.
         """
         self.ensure_one()
+###########
+        if not self.env.context.get('force_single', False):
+            raise UserError(_("This method should be called in a single record context."))
+#######
         if not self.env.company.municipal_supplier_retention_journal_id:
             raise UserError(_("The company must have a journal for municipal supplier retention."))
 
@@ -257,14 +270,16 @@ class AccountMoveRetention(models.Model):
         if payment.get("is_retention", False):
             return False
         return True
-    
+      
+
     @api.model
     def _compute_rate_for_documents(self, documents, is_sale):
         res = super()._compute_rate_for_documents(documents, is_sale)
         for move in documents:
-            if move.payment_id.is_retention:
-                move.foreign_rate = move.payment_id.foreign_rate
-                move.foreign_inverse_rate = move.payment_id.foreign_rate
+            _logger.info("Processing move: %s, origin_payment_id: %s", move.id, move.origin_payment_id)
+            if move.origin_payment_id and move.origin_payment_id.is_retention:
+               move.foreign_rate = move.origin_payment_id.foreign_rate
+               move.foreign_inverse_rate = move.origin_payment_id.foreign_inverse_rate
         return res
 
     def _get_retention_payment_move_ids(self, line_ids):
