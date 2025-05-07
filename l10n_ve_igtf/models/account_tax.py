@@ -40,12 +40,17 @@ class AccountTax(models.Model):
             - foreign_amount_total_igtf: float
             - formatted_foreign_amount_total_igtf: str
         """
+        _logger.debug("Base Lines: %s", base_lines)
+        _logger.debug("Currency: %s", currency)
+
         res = super()._prepare_tax_totals(
             base_lines,
             currency,
             tax_lines,
             is_company_currency_requested=is_company_currency_requested,
         )
+        
+        _logger.debug("Initial Res: %s", res)
 
         invoice = self.env["account.move"]
         order = False
@@ -60,6 +65,7 @@ class AccountTax(models.Model):
             if base_line["record"]._name == "account.move.line":
                 invoice = base_line["record"].move_id
             if base_line["record"]._name == "sale.order.line":
+             #elif type_model == "sale.order.line":                
                 order = base_line["record"].order_id
 
         foreign_currency = self.env.company.currency_foreign_id
@@ -67,6 +73,7 @@ class AccountTax(models.Model):
 
         if type_model == "account.move.line":
             rate = invoice.foreign_inverse_rate
+        #elif type_model == "sale.order.line": 
         if type_model == "sale.order.line":
             rate = order.foreign_inverse_rate
 
@@ -79,6 +86,7 @@ class AccountTax(models.Model):
             is_igtf_suggested = True
             base_igtf = res.get("amount_total", 0)
             foreign_base_igtf = res.get("foreign_amount_total", 0)
+        # elif type_model == "sale.order.line" and self.env.company.show_igtf_suggested_sale_order:
         if type_model == "sale.order.line" and self.env.company.show_igtf_suggested_sale_order:
             is_igtf_suggested = True
             base_igtf = res.get("amount_total", 0)
@@ -109,8 +117,10 @@ class AccountTax(models.Model):
         foreign_igtf_amount = float_round(
             foreign_igtf_base_amount * igtf_percentage, precision_rounding=foreign_currency.rounding
         )
-
-        res["igtf"] = {}
+######
+        if "igtf" not in res:
+            res["igtf"] = {}
+       #### res["igtf"] = {}
         res["igtf"]["apply_igtf"] = apply_igtf
         res["igtf"]["name"] = f"{float_igtf_percentage} %"
 
