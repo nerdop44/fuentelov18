@@ -26,6 +26,7 @@ class AccountMove(models.Model):
 
     next_installment_date = fields.Date(compute="_compute_next_installment_date")
 
+   ############## ESTA PARTE COMENTADA DEL CODIGO ES LA QUE CAUSA EL ERROR CON "MOVE_ID" AL INSTALAR #############################
 #    # INICIO DE LAS MODIFICACIONES SUGERIDAS PARA RELACIONAR CON account.retention.line
 #    retention_iva_line_ids = fields.One2many(
 #        'account.retention.line',
