@@ -680,12 +680,14 @@ class AccountMove(models.Model):
             if move.is_invoice(include_receipts=True):
                 base_lines, _tax_lines = move._get_rounded_base_and_tax_lines()
                 _logger.info(base_lines)
+                _logger.info("account.move (l10n_ve_accountant) antes de _get_tax_totals_summary: %s", self)
                 move.tax_totals = self.env['account.tax']._get_tax_totals_summary(
                     base_lines=base_lines,
                     currency=move.currency_id,
                     company=move.company_id,
                     cash_rounding=move.invoice_cash_rounding_id,
                 )
+                _logger.info("Resultado de _get_tax_totals_summary: %s", move.tax_totals)
                 _logger.info(move.tax_totals)
                 move.tax_totals['display_in_company_currency'] = (
                     move.company_id.display_invoice_tax_company_currency
