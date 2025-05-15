@@ -314,6 +314,7 @@ class AccountRetention(models.Model):
             ("state", "=", "posted"),
             ("move_type", "in", ("out_refund", "out_invoice")),
             ("amount_residual", ">", 0),
+            ("name", "!=", False),  # Añadir esta línea
         ]
         invoices_with_taxes = search_invoices_with_taxes(
             self.env["account.move"], search_domain
@@ -864,24 +865,51 @@ class AccountRetention(models.Model):
             payment.retention_line_ids.move_id.js_assign_outstanding_line(
                 line_to_reconcile.id
             )
+            
+    import logging
+    _logger = logging.getLogger(__name__)
 
     def _reconcile_customer_payment(self, payment):
-        if payment.payment_type == "outbound":
-            line_to_reconcile = payment.move_id.line_ids.filtered(
+        _logger.warning(f"Reconciliando pago ID: {payment.id}, Tipo: {payment.payment_type}")
+        if payment.move_id:
+            _logger.warning(f"Asiento contable del pago ID: {payment.move_id.id}")
+            for line in payment.move_id.line_ids:
+                _logger.warning(f"  Línea ID: {line.id}, Cuenta: {line.account_id.code} ({line.account_id.account_type}), Débito: {line.debit}, Crédito: {line.credit}")
+            filtered_lines = payment.move_id.line_ids.filtered(
                 lambda l: l.account_id.account_type == "asset_receivable"
-                and l.debit > 0
-            )[0]
-            payment.retention_line_ids.move_id.js_assign_outstanding_line(
-                line_to_reconcile.id
+                and (l.debit > 0 if payment.payment_type == "outbound" else l.credit > 0)
             )
-        elif payment.payment_type == "inbound":
-            line_to_reconcile = payment.move_id.line_ids.filtered(
-                lambda l: l.account_id.account_type == "asset_receivable"
-                and l.credit > 0
-            )[0]
-            payment.retention_line_ids.move_id.js_assign_outstanding_line(
-                line_to_reconcile.id
-            )
+            _logger.warning(f"Líneas filtradas: {filtered_lines}")
+            if filtered_lines:
+                line_to_reconcile = filtered_lines[0]
+                payment.retention_line_ids.move_id.js_assign_outstanding_line(
+                    line_to_reconcile.id
+                )
+            else:
+                _logger.warning(f"No se encontraron líneas para reconciliar en el pago {payment.id}")
+        else:
+            _logger.warning(f"El pago {payment.id} no tiene asiento contable asociado.")
+#    import logging
+#    _logger = logging.getLogger(__name__)
+
+    
+#    def _reconcile_customer_payment(self, payment):
+#        if payment.payment_type == "outbound":
+#            line_to_reconcile = payment.move_id.line_ids.filtered(
+#                lambda l: l.account_id.account_type == "asset_receivable"
+#                and l.debit > 0
+#            )[0]
+#            payment.retention_line_ids.move_id.js_assign_outstanding_line(
+#                line_to_reconcile.id
+#            )
+#        elif payment.payment_type == "inbound":
+#            line_to_reconcile = payment.move_id.line_ids.filtered(
+#                lambda l: l.account_id.account_type == "asset_receivable"
+#                and l.credit > 0
+#            )[0]
+#            payment.retention_line_ids.move_id.js_assign_outstanding_line(
+#                line_to_reconcile.id
+#            )
 
     @api.model
     def compute_retention_lines_data(self, invoice_id, payment=None):
@@ -902,59 +930,134 @@ class AccountRetention(models.Model):
         list[dict]
             The retention lines data.
         """
+        _logger.warning(f"compute_retention_lines_data: Procesando factura con ID {invoice_id.id}")
+        _logger.warning(f"compute_retention_lines_data: Atributos de la factura: {invoice_id._fields.keys()}")
+        if hasattr(invoice_id, 'number'):
+            _logger.warning(f"compute_retention_lines_data: El atributo 'number' EXISTE: {invoice_id.number}")
+        else:
+            _logger.warning(f"compute_retention_lines_data: El atributo 'number' NO EXISTE.")
+        if hasattr(invoice_id, 'name'):
+            _logger.warning(f"compute_retention_lines_data: El atributo 'name' EXISTE: {invoice_id.name}")
+        else:
+            _logger.warning(f"compute_retention_lines_data: El atributo 'name' NO EXISTE.")
+
+
         tax_ids = invoice_id.invoice_line_ids.filtered(
             lambda l: l.tax_ids and l.tax_ids[0].amount > 0
         ).mapped("tax_ids")
+        _logger.warning(f"compute_retention_lines_data: Impuestos encontrados en las líneas de factura: {tax_ids.ids}")
+
         if not any(tax_ids):
+            _logger.warning(f"compute_retention_lines_data: La factura {invoice_id.number} no tiene impuestos.")
+
             raise UserError(_("The invoice %s has no tax."), invoice_id.number)
 
         withholding_amount = invoice_id.partner_id.withholding_type_id.value
+        _logger.warning(f"compute_retention_lines_data: Tasa de retención del socio {invoice_id.partner_id.id}: {withholding_amount * 100}%")
+
         lines_data = []
-        subtotals_name = invoice_id.tax_totals["subtotals"][0]["name"]
-        tax_groups = zip(
-            invoice_id.tax_totals["groups_by_subtotal"][subtotals_name],
-            invoice_id.tax_totals["groups_by_foreign_subtotal"][subtotals_name],
-        )
-        for tax_group, foreign_tax_group in tax_groups:
-            taxes = tax_ids.filtered(
-                lambda l: l.tax_group_id.id == tax_group["tax_group_id"]
-            )
-            if not taxes:
-                continue
-            tax = taxes[0]
-            retention_amount = tax_group["tax_group_amount"] * (
-                withholding_amount / 100
-            )
-            retention_amount = float_round(
-                retention_amount,
-                precision_digits=invoice_id.company_currency_id.decimal_places,
-            )
-            line_data = {
-                "name": _("Iva Retention"),
-                "invoice_type": invoice_id.move_type,
-                "move_id": invoice_id.id,
-                "payment_id": payment.id if payment else None,
-                "aliquot": tax.amount,
-                "iva_amount": tax_group["tax_group_amount"],
-                "invoice_total": invoice_id.tax_totals["amount_total"],
-                "related_percentage_tax_base": withholding_amount,
-                "invoice_amount": tax_group["tax_group_base_amount"],
-                "foreign_currency_rate": invoice_id.foreign_rate,
-                "foreign_invoice_amount": foreign_tax_group["tax_group_base_amount"],
-                "foreign_iva_amount": foreign_tax_group["tax_group_amount"],
-                "foreign_invoice_total": invoice_id.tax_totals["foreign_amount_total"],
-            }
-            if invoice_id.move_type == "out_invoice":
-                line_data["retention_amount"] = 0.0
-                line_data["foreign_retention_amount"] = 0.0
-            else:
-                line_data["retention_amount"] = retention_amount
-                line_data["foreign_retention_amount"] = float_round(
-                    (line_data["foreign_iva_amount"] * (withholding_amount / 100)),
-                    precision_digits=invoice_id.foreign_currency_id.decimal_places,
-                )
-            lines_data.append(line_data)
+        if "subtotals" in invoice_id.tax_totals and invoice_id.tax_totals["subtotals"]:
+            _logger.warning(f"Tax Totals for invoice ID {invoice_id.id}: {invoice_id.tax_totals}")
+            for subtotal in invoice_id.tax_totals["subtotals"]:
+                subtotal_name = subtotal.get("name", "Subtotal")  # Default name
+                for tax_group_data in subtotal.get("tax_groups", []):
+                    tax = tax_ids.filtered(lambda t: t.tax_group_id.id == tax_group_data.get("id"))
+                    if not tax:
+                        _logger.warning(f"compute_retention_lines_data: No se encontró impuesto para el grupo de impuestos con ID {tax_group_data.get('id')}.")
+
+                        continue
+                    tax = tax[0]
+                    _logger.warning(f"compute_retention_lines_data: Impuesto encontrado: ID {tax.id}, Nombre {tax.name}, Grupo de Impuestos ID {tax.tax_group_id.id}")
+
+                    retention_amount = tax_group_data["tax_amount"] * (withholding_amount / 100)
+                    retention_amount = float_round(
+                        retention_amount,
+                        precision_digits=invoice_id.company_currency_id.decimal_places,
+                    )
+                    foreign_retention_amount = float_round(
+                        (tax_group_data.get("tax_amount_currency", 0.0) * (withholding_amount / 100)),
+                        precision_digits=invoice_id.foreign_currency_id.decimal_places,
+                    )
+                    line_data = {
+                        "name": _("Iva Retention"),
+                        "invoice_type": invoice_id.move_type,
+                        "move_id": invoice_id.id,
+                        "payment_id": payment.id if payment else None,
+                        "aliquot": tax.amount,
+                        "iva_amount": tax_group_data["tax_amount"],
+                        "invoice_total": invoice_id.tax_totals["total_amount"],
+                        "related_percentage_tax_base": withholding_amount,
+                        "invoice_amount": tax_group_data["base_amount"],
+                        "foreign_currency_rate": invoice_id.foreign_rate,
+                        "foreign_iva_amount": tax_group_data.get("tax_amount_currency", 0.0),
+                        "foreign_invoice_total": invoice_id.tax_totals.get("total_amount_currency", 0.0),
+                        "retention_amount": retention_amount,  # ¡Añade esta línea!
+                        "foreign_retention_amount": foreign_retention_amount,  # ¡Y esta!
+                    }
+                    # Agrega esta condición para evitar líneas con monto cero
+                    if line_data.get("retention_amount") != 0.0 or line_data.get("foreign_retention_amount") != 0.0:
+
+                        lines_data.append(line_data)
+        _logger.warning(f"compute_retention_lines_data: Datos de las líneas de retención calculadas: {lines_data}")
+
         return lines_data
+        
+#        lines_data = []
+#        subtotals_name = invoice_id.tax_totals["subtotals"][0]["name"]
+#        tax_groups = zip(
+#            invoice_id.tax_totals["groups_by_subtotal"][subtotals_name],
+#            invoice_id.tax_totals["groups_by_foreign_subtotal"][subtotals_name],
+#        )
+
+#        lines_data = []
+#        if "subtotals" in invoice_id.tax_totals and invoice_id.tax_totals["subtotals"]:
+#            subtotals_name = invoice_id.tax_totals["subtotals"][0].get("name")
+#            if subtotals_name and "groups_by_subtotal" in invoice_id.tax_totals and "groups_by_foreign_subtotal" in invoice_id.tax_totals:
+#               tax_groups = zip(
+#                   invoice_id.tax_totals["groups_by_subtotal"].get(subtotals_name, []),
+#                   invoice_id.tax_totals["groups_by_foreign_subtotal"].get(subtotals_name, []),            
+#             )
+        
+#        for tax_group, foreign_tax_group in tax_groups:
+#            taxes = tax_ids.filtered(
+#                lambda l: l.tax_group_id.id == tax_group["tax_group_id"]
+#            )
+#            if not taxes:
+#                continue
+#            tax = taxes[0]
+#            retention_amount = tax_group["tax_group_amount"] * (
+#                withholding_amount / 100
+#            )
+#            retention_amount = float_round(
+#                retention_amount,
+#                precision_digits=invoice_id.company_currency_id.decimal_places,
+#            )
+#            line_data = {
+#                "name": _("Iva Retention"),
+#                "invoice_type": invoice_id.move_type,
+#                "move_id": invoice_id.id,
+#                "payment_id": payment.id if payment else None,
+#                "aliquot": tax.amount,
+#                "iva_amount": tax_group["tax_group_amount"],
+#                "invoice_total": invoice_id.tax_totals["amount_total"],
+#                "related_percentage_tax_base": withholding_amount,
+#                "invoice_amount": tax_group["tax_group_base_amount"],
+#                "foreign_currency_rate": invoice_id.foreign_rate,
+#                "foreign_invoice_amount": foreign_tax_group["tax_group_base_amount"],
+#                "foreign_iva_amount": foreign_tax_group["tax_group_amount"],
+#                "foreign_invoice_total": invoice_id.tax_totals["foreign_amount_total"],
+#            }
+#            if invoice_id.move_type == "out_invoice":
+#                line_data["retention_amount"] = 0.0
+#                line_data["foreign_retention_amount"] = 0.0
+#            else:
+#                line_data["retention_amount"] = retention_amount
+#                line_data["foreign_retention_amount"] = float_round(
+#                    (line_data["foreign_iva_amount"] * (withholding_amount / 100)),
+#                    precision_digits=invoice_id.foreign_currency_id.decimal_places,
+#                )
+#            lines_data.append(line_data)
+#        return lines_data
 
     def get_signature(self):
         config = self.env["signature.config"].search(
