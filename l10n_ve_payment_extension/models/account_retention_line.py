@@ -369,16 +369,42 @@ class AccountRetentionLine(models.Model):
     )
     def _constraint_amounts(self):
         for record in self:
-            if any(
-                (
-                    record.retention_amount == 0,
-                    record.invoice_total == 0,
-                    record.foreign_retention_amount == 0,
-                    record.invoice_amount == 0,
-                    record.foreign_invoice_amount == 0,
-                )
+            # Solo verificar si el monto de retención es cero
+            if record.retention_amount == 0 and record.foreign_retention_amount == 0:
+                raise ValidationError(_("You can not create a retention line with 0 retention amount."))
+
+            is_vef_the_base_currency = self.env.company.currency_id == self.env.ref("base.VEF")
+            is_client_retention = record.retention_id.type == "out_invoice"
+            if (
+                is_vef_the_base_currency
+                and is_client_retention
+                and record.retention_amount > record.move_id.amount_residual
             ):
-                raise ValidationError(_("You can not create a retention with 0 amount."))
+                raise ValidationError(
+                    _(
+                        "The total amount of the retention is greater than the residual amount of"
+                        " the invoice."
+                    )
+                )
+#            if (
+#                record.retention_amount == 0
+#                and record.invoice_total == 0
+#                and record.foreign_retention_amount == 0
+#                and record.invoice_amount == 0
+#                and record.foreign_invoice_amount == 0
+#            ):
+#                continue  # Permitir líneas con todos los montos en cero
+#
+#            if any(
+#                (
+#                    record.retention_amount == 0,
+#                    record.invoice_total == 0,
+#                    record.foreign_retention_amount == 0,
+#                    record.invoice_amount == 0,
+#                    record.foreign_invoice_amount == 0,
+#                )
+#            ):
+#                raise ValidationError(_("You can not create a retention with 0 amount."))
 
             is_vef_the_base_currency = self.env.company.currency_id == self.env.ref("base.VEF")
             is_client_retention = record.retention_id.type == "out_invoice"
